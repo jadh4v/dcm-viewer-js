@@ -23,7 +23,12 @@ fileInput.addEventListener('change', async (event) => {
   fileInput.setAttribute("hidden", "");
 
   // Read series
-  const itkReader = await readImageDICOMFileSeries(files)
+  viewer.maxConcurrentFiles = 9;
+  viewer.currFileStartIndex = 0;
+  viewer.inputFiles = files;
+  const currFiles = Array.from(files).slice(viewer.currFileStartIndex, viewer.currFileStartIndex + viewer.maxConcurrentFiles);
+  // const currFileList = FileList(currFiles);
+  const itkReader = await readImageDICOMFileSeries(currFiles);
 
   // Load in viewer
   const selector = document.getElementById('slicingModeSelector')

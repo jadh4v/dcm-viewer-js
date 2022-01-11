@@ -15,6 +15,8 @@ import vtkCubeSource from '@kitware/vtk.js/Filters/Sources/CubeSource';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper';
 import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor';
 
+import readImageDICOMFileSeries from 'itk/readImageDICOMFileSeries';
+
 function screenAnatomyLabelAlong(vec) {
   const threshold = Math.sqrt(0.5);
   if (vtkMath.dot(vec, [1, 0, 0]) > threshold) return 'L'
@@ -215,11 +217,20 @@ class Viewer {
     midSlice = Math.round(midSlice / sliceStep) * sliceStep;
     this.vtk.mapper.setSlice(midSlice);
 
+    // Store slicing information.
+    this.minSlice = minSlice;
+    this.maxSlice = maxSlice;
+    this.sliceStep = sliceStep;
+
     // Slicing bounds for manipulator
     this.vtk.mouseSlicing.setScrollListener(
       minSlice, maxSlice, sliceStep,
       () => this.slice,
-      (val) => { this.slice = val; },
+      (val) => {
+        this.slice = val;
+        console.log("this.slice = ", this.slice);
+        this.demandLoading(val);
+      },
     );
 
     // Render
@@ -247,12 +258,12 @@ class Viewer {
 
     // Add manipulators
     const mousePanning = Manipulators.vtkMouseCameraTrackballPanManipulator.newInstance({
-      button: 1,
+      button: 2,
     });
     this.vtk.iStyle.addMouseManipulator(mousePanning);
 
     const mouseRotating = Manipulators.vtkMouseCameraTrackballRotateManipulator.newInstance({
-      button: 2,
+      button: 1,
     });
     this.vtk.iStyle.addMouseManipulator(mouseRotating);
 
@@ -326,7 +337,65 @@ class Viewer {
     this.vtk.ijkMarker.setViewportSize(0.15);
 
     // Slicing mode
-    this.setSlicingMode(slicingMode)
+    this.setSlicingMode(slicingMode);
+  }
+
+  async demandLoading(sliceNum) {
+
+    // determine current slicing mode.
+    const selector = document.getElementById('slicingModeSelector');
+    const slicingMode = parseInt(selector.value);
+    let newSliceNum = -1;
+
+    // If next block needs loading
+    if(sliceNum >= this.maxSlice) {
+      if((this.currFileStartIndex + this.maxConcurrentFiles + 1) < this.inputFiles.length) {
+        this.currFileStartIndex += this.maxConcurrentFiles - 1;
+        const currFiles = Array.from(this.inputFiles).slice(this.currFileStartIndex, this.currFileStartIndex + this.maxConcurrentFiles);
+        const itkReader = await readImageDICOMFileSeries(currFiles);
+        this.updateExtents(itkReader);
+        newSliceNum = this.minSlice;
+      }
+    }
+    // else if previous block needs loading
+    else if(sliceNum <= this.minSlice) {
+      if(this.currFileStartIndex > 0) {
+        this.currFileStartIndex -= this.maxConcurrentFiles + 1;
+        const currFiles = Array.from(this.inputFiles).slice(this.currFileStartIndex, this.currFileStartIndex + this.maxConcurrentFiles);
+        const itkReader = await readImageDICOMFileSeries(currFiles);
+        this.updateExtents(itkReader);
+        newSliceNum = this.maxSlice;
+      }
+    }
+
+    if(newSliceNum != -1) {
+      console.log("new origin  = ", this.vtk.data.getOrigin());
+      console.log("new bounds  = ", this.vtk.data.getBounds());
+      console.log("new extents = ", this.vtk.data.getExtent());
+      // Slicing bounds for manipulator
+      this.vtk.mouseSlicing.setScrollListener(
+        this.minSlice, this.maxSlice, this.sliceStep,
+        () => this.slice,
+        (val) => {
+          this.slice = val;
+          console.log("this.slice = ", this.slice);
+          this.demandLoading(val);
+        },
+      );
+      this.slice = newSliceNum;
+      console.log("this.slice = ", this.slice);
+    }
+  }
+
+  updateExtents(itkReader) {
+    this.vtk.data = ITKHelper.convertItkToVtkImage(itkReader.image);
+    this.vtk.mapper.setInputData(this.vtk.data);
+    const extents = this.vtk.data.getExtent();
+    extents[4] = this.currFileStartIndex;
+    extents[5] = this.currFileStartIndex + this.maxConcurrentFiles - 1;
+    this.vtk.data.setExtent(extents);
+    this.minSlice = extents[4];
+    this.maxSlice = extents[5];
   }
 
   get windowWidth() {
