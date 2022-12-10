@@ -97,16 +97,18 @@ class Viewer {
       }
     }
     const d9 = this.vtk.data.getDirection();
+
     const d3x3 = [
-      [d9[0], d9[3], d9[6]],
-      [d9[1], d9[4], d9[7]],
-      [d9[2], d9[5], d9[8]],
+      d9[0], d9[3], d9[6],
+      d9[1], d9[4], d9[7],
+      d9[2], d9[5], d9[8],
     ];
     const d3x3_inv = [ // rotation: inverse = transpose
-      [d9[0], d9[1], d9[2]],
-      [d9[3], d9[4], d9[5]],
-      [d9[6], d9[7], d9[8]],
+      d9[0], d9[1], d9[2],
+      d9[3], d9[4], d9[5],
+      d9[6], d9[7], d9[8],
     ];
+
     let normal = [0, 0, 0];
     let viewUp = [0, 0, 0];
     // VTK is in LPS, therefore +X = L; -X = R; +Y = P; -Y = A; +Z = S; -Z = I
